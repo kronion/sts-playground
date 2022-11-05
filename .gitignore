@@ -1,0 +1,14 @@
+__pycache__/
+
+# Don't check in 3rd party jars (game + mods)
+lib
+mods
+
+# Communication channel with docker containers
+out
+
+# Temp directory for running the game locally
+tmp
+
+# Never check the game in, wherever it may be in the tree
+desktop-1.0.jar
