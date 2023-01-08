@@ -15,6 +15,8 @@ from ray.train.rl import RLTrainer
 from gym_sts.envs import base
 from gym_sts.rl import models_tf
 
+from .callbacks import CustomMetricCallbacks
+
 
 def check_rllib_bug(space: spaces.Space):
     # rllib special-cases certain spaces, which we don't want
@@ -43,7 +45,7 @@ TUNE = ff.DEFINE_dict(
     "tune",
     name=ff.String("sts-rl", "Name of the ray experiment"),
     checkpoint_config=dict(
-        checkpoint_frequency=ff.Integer(20),
+        checkpoint_frequency=ff.Integer(5),
         checkpoint_at_end=ff.Boolean(False),
         num_to_keep=ff.Integer(3),
     ),
@@ -115,6 +117,7 @@ def main(_):
         "model": {
             "custom_model": "masked",
         },
+        "callbacks": CustomMetricCallbacks,
     }
     ppo_config.update(rl_config)
 
@@ -148,7 +151,7 @@ def main(_):
 
     restore_path = tune_config.get("restore")
     if restore_path:
-        tuner = tune.Tuner.restore(restore_path)
+        tuner = tune.Tuner.restore(restore_path, resume_errored=True)
 
     tuner.fit()
 
