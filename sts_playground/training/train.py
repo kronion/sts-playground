@@ -13,7 +13,7 @@ from ray.rllib.models import preprocessors
 from ray.train.rl import RLTrainer
 
 from gym_sts.envs import base
-from gym_sts.rl import models_tf
+from gym_sts.rl import action_masking
 
 from .callbacks import CustomMetricCallbacks
 
@@ -29,7 +29,7 @@ def check_rllib_bug(space: spaces.Space):
 
 check_rllib_bug(base.OBSERVATION_SPACE)
 
-models_tf.register()
+action_masking.register()
 
 ENV = ff.DEFINE_dict(
     "env",
@@ -109,7 +109,7 @@ def main(_):
     ppo_config = {
         "env": Env,
         "env_config": env_config,
-        "framework": "tf2",
+        "framework": "torch",
         "eager_tracing": True,
         # "horizon": 64,  # just for reporting some rewards
         # "soft_horizon": True,
