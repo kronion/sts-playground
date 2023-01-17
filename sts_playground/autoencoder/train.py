@@ -56,15 +56,8 @@ def space_size(space) -> int:
     if isinstance(space, spaces.Discrete):
         return space.n
     if isinstance(space, spaces.MultiBinary):
-        assert isinstance(space.n, (int, tuple))
-        if isinstance(space.n, tuple):
-            assert all(isinstance(n, int) for n in space.n)
-            total = 1
-            for n in space.n:
-                total *= n
-            return total
-        else:
-            return space.n
+        assert isinstance(space.n, int)
+        return space.n
     if isinstance(space, spaces.MultiDiscrete):
         return space.nvec.sum()
     if isinstance(space, spaces.Dict):
@@ -277,9 +270,12 @@ def main(_):
 
     start_time = time.perf_counter()
     for epoch in range(10):
+        epoch_start_time = time.perf_counter()
         print(f"Epoch {epoch}")
         train()
-        print(f"Epoch runtime: {time.perf_counter() - start_time}")
+        end_time = time.perf_counter()
+        print(f"Epoch runtime: {end_time - epoch_start_time}")
+        print(f"Total runtime: {end_time - start_time}")
 
 
 if __name__ == "__main__":
