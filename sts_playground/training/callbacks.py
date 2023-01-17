@@ -57,9 +57,6 @@ class CustomMetricCallbacks(DefaultCallbacks):
             raw_action = episode.last_action_for()
             action = actions.ACTIONS[raw_action]
 
-            if not isinstance(action, actions.Choose):
-                breakpoint()
-
             if isinstance(action, actions.Choose):
                 choices = data["campfire_options"]
                 choice = choices[action.choice_index]
