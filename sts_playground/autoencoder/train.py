@@ -1,4 +1,6 @@
 import pickle
+import statistics
+import time
 import typing as tp
 
 import numpy as np
@@ -12,9 +14,12 @@ from gym_sts.envs import base
 
 DATA = flags.DEFINE_string("data", "data/states.pkl", "path to data")
 
-LR = flags.DEFINE_float("lr", 1e-3, "learning rate")
+LR = flags.DEFINE_float("lr", 1e-5, "learning rate")
 BATCH_SIZE = flags.DEFINE_integer("batch_size", 100, "batch size")
+VALIDATION_BATCH_SIZE = flags.DEFINE_integer("validation_batch_size", 1_000, "validation batch size")
 LOSS = flags.DEFINE_enum("loss", "ce", ["ce", "mse"], "type of loss")
+
+GPU = flags.DEFINE_bool("gpu", True, "use GPU if available")
 
 
 def one_hot(x, n):
@@ -51,8 +56,15 @@ def space_size(space) -> int:
     if isinstance(space, spaces.Discrete):
         return space.n
     if isinstance(space, spaces.MultiBinary):
-        assert isinstance(space.n, int)
-        return space.n
+        assert isinstance(space.n, (int, tuple))
+        if isinstance(space.n, tuple):
+            assert all(isinstance(n, int) for n in space.n)
+            total = 1
+            for n in space.n:
+                total *= n
+            return total
+        else:
+            return space.n
     if isinstance(space, spaces.MultiDiscrete):
         return space.nvec.sum()
     if isinstance(space, spaces.Dict):
@@ -173,17 +185,33 @@ def main(_):
     flat_spaces = tree.flatten(obs_space)
     print("num components:", len(flat_spaces))
 
+    if GPU.value and torch.cuda.is_available():
+        device_name = "cuda:0"
+    else:  
+        device_name = "cpu"
+    device = torch.device(device_name)
+    print(f"Using {device} device")
+
     # prepare data
     flat_train_data = tree.flatten(train_tensor)
+    flat_train_data = [t.to(device) for t in flat_train_data]
     train_dataset = torch.utils.data.TensorDataset(*flat_train_data)
     data_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=BATCH_SIZE.value, shuffle=True, drop_last=True
     )
     assert len(data_loader)
-    print("num batches", len(data_loader))
+    print("num train batches", len(data_loader))
+
+    flat_validation_data = tree.flatten(valid_tensor)
+    flat_validation_data = [t.to(device) for t in flat_validation_data]
+    val_dataset = torch.utils.data.TensorDataset(*flat_validation_data)
+    val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=VALIDATION_BATCH_SIZE.value)
+    assert len(val_data_loader)
+    print("num validation batches", len(val_data_loader))
 
     input_dim = space_size(base.OBSERVATION_SPACE)
     auto_encoder = make_auto_encoder(input_dim, depth=1, width=128)
+    auto_encoder = auto_encoder.to(device)
 
     optimizer = torch.optim.Adam(auto_encoder.parameters(), lr=LR.value)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -217,8 +245,8 @@ def main(_):
         )
 
     def print_results(results: dict, prefix: str = ""):
-        loss = results["loss"].double()
-        top1 = results["top1"].double()
+        loss = results["loss"]
+        top1 = results["top1"]
         print(f"{prefix} loss={loss:.1f} top1={top1:.5f}", end="\n")
 
     def train():
@@ -234,15 +262,24 @@ def main(_):
                 results=results, prefix=f"Batch: {batch_num+1}/{total_batches}"
             )
 
-        val_results = get_loss(tree.flatten(valid_tensor))
-        val_loss = val_results["loss"]
-        print_results(val_results, "Validation:")
-        val_losses.append(float(val_loss))
+        validation_losses = []
+        validation_top1s = []
+        for batch_num, batch in enumerate(val_data_loader):
+            val_results = get_loss(batch)
+            validation_losses.append(float(val_results["loss"]))
+            validation_top1s.append(float(val_results["top1"]))
+        
+        val_loss = statistics.fmean(validation_losses)
+        val_top1 = statistics.fmean(validation_top1s)
+        print_results({"loss": val_loss, "top1": val_top1}, "Validation:")
+        val_losses.append(val_loss)
         scheduler.step(val_loss)
 
+    start_time = time.perf_counter()
     for epoch in range(10):
         print(f"Epoch {epoch}")
         train()
+        print(f"Epoch runtime: {time.perf_counter() - start_time}")
 
 
 if __name__ == "__main__":
