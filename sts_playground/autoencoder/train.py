@@ -1,5 +1,6 @@
 import pickle
 import getpass
+import time
 import typing as tp
 
 import fancyflags as ff
@@ -252,15 +253,20 @@ def main(_):
         print(f"Epoch {epoch}")
         total_batches = len(data_loader)
         for batch_num, batch in enumerate(data_loader):
+            start_time = time.perf_counter()
             results = get_loss(batch)
             loss: torch.Tensor = results["loss"]
             loss.backward()
             training_losses.append(float(loss))
             optimizer.step()
+            step_time = time.perf_counter() - start_time
 
-            print_results(
-                results=results, prefix=f"Batch: {batch_num+1}/{total_batches}"
-            )
+            loss = results["loss"].double()
+            top1 = results["top1"].double()
+            print(
+               f"Batch: {batch_num+1}/{total_batches} "
+               f"loss={loss:.1f} top1={top1:.5f} time={step_time:.2f}s",
+               end="\n")
 
             to_log = dict(
                 loss=results["loss"].double(),
