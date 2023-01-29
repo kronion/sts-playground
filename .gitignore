@@ -14,4 +14,7 @@ tmp
 desktop-1.0.jar
 
 # Don't check in local wandb experiment files.
-./wandb
+wandb
+
+# training data
+data
