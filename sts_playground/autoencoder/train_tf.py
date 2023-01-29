@@ -23,6 +23,12 @@ LOSS = flags.DEFINE_enum("loss", "ce", ["ce", "mse"], "type of loss")
 NUM_EPOCHS = flags.DEFINE_integer('num_epochs', 10, 'number of training epochs')
 COMPILE = flags.DEFINE_boolean('compile', True, 'Use tf.function.')
 
+NETWORK = ff.DEFINE_dict(
+    'network',
+    depth=ff.Integer(1, 'number of intermediate layers'),
+    width=ff.Integer(128, 'size of each intermediate layer'),
+)
+
 # passed to wandb.init
 WANDB = ff.DEFINE_dict(
     'wandb',
@@ -214,7 +220,7 @@ def main(_):
     train_ds = train_ds.batch(BATCH_SIZE.value, drop_remainder=True)
 
     input_dim = space_size(base.OBSERVATION_SPACE)
-    auto_encoder = make_auto_encoder(input_dim, depth=1, width=128)
+    auto_encoder = make_auto_encoder(input_dim, **NETWORK.value)
 
     optimizer = snt.optimizers.Adam(LR.value)
 
