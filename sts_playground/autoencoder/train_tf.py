@@ -253,8 +253,9 @@ def main(_):
 
         return loss, metrics
 
-    if COMPILE.value:
-      compute_loss = tf.function(compute_loss)
+    # TODO: reduce compilation memory/overhead and re-enable compilation here.
+    # if COMPILE.value:
+    #   compute_loss = tf.function(compute_loss)
 
     def train_step(batch) -> dict:
       with tf.GradientTape() as tape:
