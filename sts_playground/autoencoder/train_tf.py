@@ -271,7 +271,7 @@ def main(_):
       return metrics
 
     if COMPILE.value:
-      train_step = tf.function(train_step)
+      train_step = tf.function(train_step, autograph=False)
 
     def print_results(results: dict, prefix: str = ""):
         loss = results["loss"]
