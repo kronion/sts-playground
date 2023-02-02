@@ -40,7 +40,6 @@ WANDB = ff.DEFINE_dict(
     notes=ff.String(None),
 )
 
-
 def space_as_nest(space: spaces.Space):
     if isinstance(space, spaces.Dict):
         return {k: space_as_nest(v) for k, v in space.items()}
@@ -91,7 +90,7 @@ def ce_loss(x, y):
   y = tf.one_hot(y, depth=x.shape[-1])
   return tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=x)
 
-def struct_loss(space: spaces.Space, x, y):
+def struct_loss(space: spaces.Space, x: tf.Tensor, y: tf.Tensor):
     if isinstance(space, spaces.Discrete):
         return ce_loss(x, y)
 
@@ -101,7 +100,20 @@ def struct_loss(space: spaces.Space, x, y):
         return tf.reduce_sum(loss, axis=-1)
 
     if isinstance(space, spaces.MultiDiscrete):
-        assert y.shape[-1] == len(space.nvec)
+        num_components = space.nvec.shape[0]
+        assert y.shape[-1] == num_components
+        assert x.shape[-1] == space.nvec.sum()
+
+        n = space.nvec[0]
+        if np.all(space.nvec == n):
+          # If all the Discrete's are the same size, we can avoid the expensive
+          # unstack and do a reshape instead.
+          old_shape = x.shape.as_list()
+          new_shape = old_shape[:-1] + [num_components, n]
+          new_x = tf.reshape(x, new_shape)
+          losses = ce_loss(new_x, y)
+          return tf.reduce_sum(losses, axis=-1)
+
         losses = []
         logits = tf.split(x, tuple(space.nvec), axis=-1)
         for x_, y_ in zip(logits, tf.unstack(y, axis=-1)):
@@ -120,7 +132,7 @@ def struct_loss(space: spaces.Space, x, y):
     raise NotImplementedError(type(space))
 
 
-def discrete_accuracy(x, y) -> tf.Tensor:
+def discrete_accuracy(x: tf.Tensor, y: tf.Tensor) -> tf.Tensor:
     argmax = tf.argmax(x, axis=-1)
     y = tf.cast(y, argmax.dtype)
     return tf.cast(tf.equal(argmax, y), tf.float32)
@@ -138,7 +150,20 @@ def accuracy(space: spaces.Space, x: tf.Tensor, y: tf.Tensor):
         return tf.reduce_mean(tf.cast(correct, tf.float32), axis=-1)
 
     if isinstance(space, spaces.MultiDiscrete):
-        assert y.shape[-1] == len(space.nvec)
+        num_components = space.nvec.shape[0]
+        assert y.shape[-1] == num_components
+        assert x.shape[-1] == space.nvec.sum()
+
+        n = space.nvec[0]
+        if np.all(space.nvec == n):
+          # If all the Discrete's are the same size, we can avoid the expensive
+          # unstack and do a reshape instead.
+          old_shape = x.shape.as_list()
+          new_shape = old_shape[:-1] + [num_components, n]
+          new_x = tf.reshape(x, new_shape)
+          losses = discrete_accuracy(new_x, y)
+          return tf.reduce_mean(losses, axis=-1)
+
         losses = []
         logits = tf.split(x, tuple(space.nvec), axis=-1)
         for x_, y_ in zip(logits, tf.unstack(y, axis=-1)):
