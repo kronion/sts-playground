@@ -13,6 +13,7 @@ from gym import spaces
 import wandb
 
 from gym_sts.envs import base
+from sts_playground import utils
 
 DATA = flags.DEFINE_string("data", "data/states.pkl", "path to data")
 
@@ -195,12 +196,28 @@ def fix_dtype(x: np.ndarray):
     return x.astype(np.int32)
   return x
 
+def convert_lists(struct):
+    """Convert all lists to tuples in a struct."""
+    if isinstance(struct, tp.Mapping):
+        return {k: convert_lists(v) for k, v in struct.items()}
+    if isinstance(struct, tp.Sequence):
+        return tuple(map(convert_lists, struct))
+    return struct
+
 def main(_):
     # download from https://drive.google.com/file/d/1R5eyUebTXsNJV4PCoDQE9lWfKxlWmsNs/view?usp=share_link  # noqa: E501
     with open(DATA.value, "rb") as f:
         column_major = pickle.load(f)
     
+    column_major = column_major['state_before']
     column_major = tree.map_structure(fix_dtype, column_major)
+    column_major = convert_lists(column_major)
+
+    obs_space = space_as_nest(base.OBSERVATION_SPACE)
+    for diff in utils.tree_diff(obs_space, column_major):
+        print(diff)
+        import ipdb; ipdb.set_trace()
+    tree.assert_same_structure(obs_space, column_major)
 
     total_size = len(tree.flatten(column_major)[0])
     train_size = round(total_size * 0.8)
@@ -232,14 +249,13 @@ def main(_):
     input_size = space_size(base.OBSERVATION_SPACE)
     print("input_size", input_size)
 
-    obs_space = space_as_nest(base.OBSERVATION_SPACE)
     flat_spaces = tree.flatten(obs_space)
     print("num components:", len(flat_spaces))
 
     # prepare data
-    flat_train_set = tuple(tree.flatten(train_set))
+    # flat_train_set = tuple(tree.flatten(train_set))
     # We could avoid flattening if we used tuples instead of lists in obs struct.
-    train_ds = tf.data.Dataset.from_tensor_slices(flat_train_set)
+    train_ds = tf.data.Dataset.from_tensor_slices(train_set)
     assert len(train_ds) == train_size
     # train_ds = train_ds.shuffle(train_size, reshuffle_each_iteration=True)
     train_ds = train_ds.batch(BATCH_SIZE.value, drop_remainder=True)
@@ -249,8 +265,7 @@ def main(_):
 
     optimizer = snt.optimizers.Adam(LR.value)
 
-    def compute_loss(flat_batch) -> tp.Tuple[tf.Tensor, dict]:
-        batch = tree.unflatten_as(obs_space, flat_batch)
+    def compute_loss(batch) -> tp.Tuple[tf.Tensor, dict]:
         metrics = {}
 
         flat_input = encode(base.OBSERVATION_SPACE, batch)
@@ -329,7 +344,7 @@ def main(_):
             step += 1
 
         # TODO: we should split up the validation set into batches
-        _, val_results = compute_loss(tree.flatten(valid_set))
+        _, val_results = compute_loss(valid_set)
         print_results(val_results, "Validation:")
         # TODO: use validation loss to adjust learning rate
 
