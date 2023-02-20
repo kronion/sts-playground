@@ -52,15 +52,32 @@ def space_as_nest(space: spaces.Space):
 
 def encode(space, x) -> tf.Tensor:
     """Gives a flat encoding of a structured observation."""
+
     if isinstance(space, spaces.Discrete):
         return tf.one_hot(x, space.n)
+
     if isinstance(space, spaces.MultiBinary):
         return tf.cast(x, tf.float32)
+
     if isinstance(space, spaces.MultiDiscrete):
+        num_components = space.nvec.shape[0]
+        assert x.shape[-1] == num_components
+
+        n = space.nvec[0]
+        if np.all(space.nvec == n):
+          # If all the Discrete's are the same size, we can avoid the expensive
+          # unstack and do a reshape instead.
+          y = tf.one_hot(x, n)
+          old_shape = y.shape.as_list()
+          assert old_shape[-2:] == [num_components, n]
+          new_shape = old_shape[:-2] + [num_components * n]
+          return tf.reshape(y, new_shape)
+
         one_hots = []
-        for n, y in zip(space.nvec, tf.unstack(x, axis=-1)):
-            one_hots.append(tf.one_hot(y, n))
+        for n, x_i in zip(space.nvec, tf.unstack(x, axis=-1)):
+            one_hots.append(tf.one_hot(x_i, n))
         return tf.concat(one_hots, axis=-1)
+
     if isinstance(space, (spaces.Dict, spaces.Tuple)):
         encodings = tree.map_structure(
             encode, space_as_nest(space), x, check_types=False
@@ -122,6 +139,8 @@ def struct_loss(space: spaces.Space, x: tf.Tensor, y: tf.Tensor):
             losses.append(ce_loss(x_, y_))
         return tf.add_n(losses)
 
+    # TODO: We have some Tuple spaces whose elements are entirely identical; we should
+    # batch across them.
     if isinstance(space, (spaces.Dict, spaces.Tuple)):
         space = space_as_nest(space)
         flat_spaces = tree.flatten(space)
