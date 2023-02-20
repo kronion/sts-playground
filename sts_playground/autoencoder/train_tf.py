@@ -9,6 +9,7 @@ import numpy as np
 import tensorflow as tf
 import sonnet as snt
 import tree
+import tqdm
 from gym import spaces
 import wandb
 
@@ -18,7 +19,7 @@ from sts_playground import utils
 DATA = flags.DEFINE_string("data", "data/states.pkl", "path to data")
 
 LR = flags.DEFINE_float("lr", 1e-4, "learning rate")
-BATCH_SIZE = flags.DEFINE_integer("batch_size", 100, "batch size")
+BATCH_SIZE = flags.DEFINE_integer("batch_size", 1024, "batch size")
 LOSS = flags.DEFINE_enum("loss", "ce", ["ce", "mse"], "type of loss")
 
 NUM_EPOCHS = flags.DEFINE_integer('num_epochs', 10, 'number of training epochs')
@@ -205,7 +206,7 @@ def convert_lists(struct):
     return struct
 
 def main(_):
-    # download from https://drive.google.com/file/d/1R5eyUebTXsNJV4PCoDQE9lWfKxlWmsNs/view?usp=share_link  # noqa: E501
+    # download from https://drive.google.com/file/d/180068R95gdt-OAMm4-79bTlB2uq4P1UX/view?usp=share_link  # noqa: E501
     with open(DATA.value, "rb") as f:
         column_major = pickle.load(f)
     
@@ -253,12 +254,12 @@ def main(_):
     print("num components:", len(flat_spaces))
 
     # prepare data
-    # flat_train_set = tuple(tree.flatten(train_set))
-    # We could avoid flattening if we used tuples instead of lists in obs struct.
     train_ds = tf.data.Dataset.from_tensor_slices(train_set)
+    valid_ds = tf.data.Dataset.from_tensor_slices(valid_set)
     assert len(train_ds) == train_size
     # train_ds = train_ds.shuffle(train_size, reshuffle_each_iteration=True)
     train_ds = train_ds.batch(BATCH_SIZE.value, drop_remainder=True)
+    valid_ds = valid_ds.batch(BATCH_SIZE.value, drop_remainder=True)
 
     input_dim = space_size(base.OBSERVATION_SPACE)
     auto_encoder = make_auto_encoder(input_dim, **NETWORK.value)
@@ -287,7 +288,7 @@ def main(_):
         top1 = tree.map_structure(  # {[]}
             lambda x: tf.reduce_mean(x, axis=0), top1)
         top1_mean = tf.reduce_mean(tf.stack(tree.flatten(top1)))  # []
-        
+
         metrics['top1'] = top1
         metrics['top1_mean'] = top1_mean
 
@@ -343,14 +344,21 @@ def main(_):
 
             step += 1
 
-        # TODO: we should split up the validation set into batches
-        _, val_results = compute_loss(valid_set)
-        print_results(val_results, "Validation:")
+        print("Computing validation metrics.")
+        valid_results = []
+        for batch in tqdm.tqdm(valid_ds):
+            _, results = compute_loss(batch)
+            valid_results.append(results)
+
+        # take the mean over all the validation batches
+        valid_results = tree.map_structure(
+            lambda *xs: np.mean(xs), *valid_results)
+        print_results(valid_results, "Validation:")
         # TODO: use validation loss to adjust learning rate
 
         to_log = dict(
-            loss=val_results["loss"],
-            top1=val_results["top1"],
+            loss=valid_results["loss"],
+            top1=valid_results["top1"],
             epoch=epoch + 1,
         )
         wandb.log(dict(validation=to_log), step=step)
