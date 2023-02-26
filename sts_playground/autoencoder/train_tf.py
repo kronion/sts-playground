@@ -3,6 +3,8 @@ import getpass
 
 from absl import app, flags
 import fancyflags as ff
+import numpy as np
+import tree
 import wandb
 
 from sts_playground.autoencoder import tf_lib
@@ -16,6 +18,8 @@ LOSS = flags.DEFINE_enum("loss", "ce", ["ce", "mse"], "type of loss")
 NUM_EPOCHS = flags.DEFINE_integer('num_epochs', 10, 'number of training epochs')
 COMPILE = flags.DEFINE_boolean('compile', True, 'Use tf.function.')
 
+DATA_LIMIT = flags.DEFINE_integer('data_limit', None, 'limit the dataset size')
+
 NETWORK = ff.DEFINE_dict(
     'network',
     depth=ff.Integer(1, 'number of intermediate layers'),
@@ -26,7 +30,7 @@ NETWORK = ff.DEFINE_dict(
 WANDB = ff.DEFINE_dict(
     'wandb',
     entity=ff.String('sts-ai'),
-    project=ff.String('autoencoder'),
+    project=ff.String('next-state-prediction'),
     mode=ff.Enum('offline', ['online', 'offline', 'disabled']),
     group=ff.String(getpass.getuser()),  # group by username
     name=ff.String(None),
@@ -38,7 +42,20 @@ def main(_):
     # download from https://drive.google.com/file/d/180068R95gdt-OAMm4-79bTlB2uq4P1UX/view?usp=share_link  # noqa: E501
     with open(DATA.value, "rb") as f:
         data = pickle.load(f)
-    data = data['state_before']
+    data['action'] = np.array(data['action'])
+
+    dataset_size = len(data['action'])
+    data_limit = DATA_LIMIT.value
+    if data_limit:
+        if data_limit > dataset_size:
+            raise ValueError('Data limit {data_limit} exceeds dataset size {dataset_size}.')
+        data = tree.map_structure(lambda xs: xs[:data_limit].copy(), data)
+        print(f'Limited dataset size to {data_limit}')
+        dataset_size = data_limit
+
+    # preprocess the data
+    data = tree.map_structure(tf_lib.fix_dtype, data)
+    data = tf_lib.convert_lists(data)
 
     wandb.init(
         config=dict(
@@ -46,7 +63,7 @@ def main(_):
             batch_size=BATCH_SIZE.value,
             loss=LOSS.value,
             network=NETWORK.value,
-            # dataset_size=total_size,
+            dataset_size=dataset_size,
         ),
         **WANDB.value,
     )
