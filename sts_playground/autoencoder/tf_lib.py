@@ -1,3 +1,4 @@
+import gc
 import pickle
 import time
 import typing as tp
@@ -287,17 +288,17 @@ def train(
     print("num components:", len(flat_spaces))
 
     # prepare data
-    train_ds = tf.data.Dataset.from_tensor_slices(train_set)
-    valid_ds = tf.data.Dataset.from_tensor_slices(valid_set)
+    train_ds = tf.data.Dataset.from_tensor_slices(train_set).prefetch(2)
+    valid_ds = tf.data.Dataset.from_tensor_slices(valid_set).prefetch(2)
     assert len(train_ds) == train_size
     del train_set, valid_set
+    gc.collect()  # clean up old unnecessary data
 
     # train_ds = train_ds.shuffle(train_size, reshuffle_each_iteration=True)
     train_ds = train_ds.batch(batch_size, drop_remainder=True)
     valid_ds = valid_ds.batch(batch_size, drop_remainder=True)
 
     auto_encoder = make_auto_encoder(input_size, **network_config)
-
     optimizer = snt.optimizers.Adam(learning_rate)
 
     def compute_loss(batch) -> tp.Tuple[tf.Tensor, dict]:
@@ -328,9 +329,8 @@ def train(
 
         return loss, metrics
 
-    # TODO: reduce compilation memory/overhead and re-enable compilation here.
-    # if compile:
-    #   compute_loss = tf.function(compute_loss)
+    if compile:
+      compute_loss = tf.function(compute_loss)
 
     def train_step(batch) -> dict:
       with tf.GradientTape() as tape:
@@ -368,7 +368,7 @@ def train(
 
             if batch_num % 1 == 0:
               _print_results(results, "Train:")
-              print(f'data={data_profiler.mean_time()} step={step_profiler.mean_time()}')
+              print(f'data={data_profiler.mean_time():.3f} step={step_profiler.mean_time():.3f}')
               to_log = _results_to_log(results)
               to_log['epoch'] = epoch + batch_num / total_batches,
               logger(dict(train=to_log), step=step)
