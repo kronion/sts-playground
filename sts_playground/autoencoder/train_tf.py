@@ -1,4 +1,3 @@
-import pickle
 import getpass
 
 from absl import app, flags
@@ -35,11 +34,6 @@ WANDB = ff.DEFINE_dict(
 
 
 def main(_):
-    # download from https://drive.google.com/file/d/180068R95gdt-OAMm4-79bTlB2uq4P1UX/view?usp=share_link  # noqa: E501
-    with open(DATA.value, "rb") as f:
-        data = pickle.load(f)
-    data = data['state_before']
-
     wandb.init(
         config=dict(
             lr=LR.value,
@@ -52,7 +46,7 @@ def main(_):
     )
 
     tf_lib.train(
-        column_major=data,
+        data_path=DATA.value,
         batch_size=BATCH_SIZE.value,
         network_config=NETWORK.value,
         learning_rate=LR.value,

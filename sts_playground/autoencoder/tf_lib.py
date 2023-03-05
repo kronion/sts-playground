@@ -1,3 +1,4 @@
+import pickle
 import time
 import typing as tp
 
@@ -199,17 +200,56 @@ class Logger(tp.Protocol):
     def __call__(self, data: tree.Structure[tp.Any], step: tp.Optional[int]):
         """Log some data."""
 
+def _add_top1_bottom(results):
+    top1_sorted = sorted(tree.flatten(results['top1']))
+    results['top1_bottom'] = {
+        n: np.mean(top1_sorted[:n]) for n in [1, 5, 10, 20]
+    }
+
+def _print_results(results: dict, prefix: str = ""):
+    loss = results["loss"]
+    top1_bottom = results['top1_bottom'][5]
+    print(f"{prefix} loss={loss:.1f} top1_bottom_5={top1_bottom:.2f}", end="\n")
+
+def _results_to_log(results: dict) -> dict:
+    return {k: results[k] for k in ['loss', 'top1', 'top1_bottom', 'top1_mean']}
+
+
+class Profiler:
+  def __init__(self):
+     self.reset()
+
+  def reset(self):
+    self.cumtime = 0
+    self.num_calls = 0
+
+  def __enter__(self):
+    self._enter_time = time.perf_counter()
+
+  def __exit__(self, type, value, traceback):
+    self.cumtime += time.perf_counter() - self._enter_time
+    self.num_calls += 1
+
+  def mean_time(self):
+    return self.cumtime / self.num_calls
+
 
 def train(
-    column_major: dict,
+    data_path: str,
     batch_size: int,
     network_config: dict,
     learning_rate: float,
     num_epochs: int,
     logger: Logger,
+    log_interval: int = 10,
     loss_type: str = 'ce',
     compile: bool = True,
 ):
+    # download from https://drive.google.com/file/d/180068R95gdt-OAMm4-79bTlB2uq4P1UX/view?usp=share_link  # noqa: E501
+    with open(data_path, "rb") as f:
+        column_major = pickle.load(f)
+    column_major = column_major['state_before']
+
     column_major = tree.map_structure(fix_dtype, column_major)
     column_major = convert_lists(column_major)
 
@@ -227,11 +267,15 @@ def train(
     # util.structure.type_spec_from_value(column_major)
 
     train_set = tree.map_structure(lambda x: x[:train_size], column_major)
-    valid_set = tree.map_structure(lambda x: x[train_size:], column_major)
+    valid_set = tree.map_structure(lambda x: x[train_size:].copy(), column_major)
+    del column_major
 
     # Shuffle the train set in numpy because tfds is very slow.
     rng = np.random.RandomState(0)
-    tree.map_structure(rng.shuffle, train_set)
+    # tree.map_structure(rng.shuffle, train_set)
+    permutation = rng.permutation(train_size)
+    train_set = tree.map_structure(lambda xs: xs[permutation].copy(), train_set)
+    del permutation, rng
 
     # train_tensor = tree.map_structure(to_tensor, train_set)
     # valid_tensor = tree.map_structure(to_tensor, valid_set)
@@ -246,12 +290,13 @@ def train(
     train_ds = tf.data.Dataset.from_tensor_slices(train_set)
     valid_ds = tf.data.Dataset.from_tensor_slices(valid_set)
     assert len(train_ds) == train_size
+    del train_set, valid_set
+
     # train_ds = train_ds.shuffle(train_size, reshuffle_each_iteration=True)
     train_ds = train_ds.batch(batch_size, drop_remainder=True)
     valid_ds = valid_ds.batch(batch_size, drop_remainder=True)
 
-    input_dim = space_size(base.OBSERVATION_SPACE)
-    auto_encoder = make_auto_encoder(input_dim, **network_config)
+    auto_encoder = make_auto_encoder(input_size, **network_config)
 
     optimizer = snt.optimizers.Adam(learning_rate)
 
@@ -303,33 +348,30 @@ def train(
     if compile:
       train_step = tf.function(train_step, autograph=False)
 
-    def print_results(results: dict, prefix: str = ""):
-        loss = results["loss"]
-        top1 = results["top1_mean"]
-        print(f"{prefix} loss={loss:.1f} top1={top1:.5f}", end="\n")
-
-    step = 0
+    step = 0  # number of training steps
     for epoch in range(num_epochs):
         print(f"Epoch {epoch}")
         total_batches = len(train_ds)
-        for batch_num, batch in enumerate(train_ds):
-            start_time = time.perf_counter()
-            results = train_step(batch)
-            step_time = time.perf_counter() - start_time
+        batch_iter = iter(train_ds)
 
-            loss = results["loss"]
-            top1 = results["top1_mean"]
-            print(
-               f"Batch: {batch_num+1}/{total_batches} "
-               f"loss={loss:.1f} top1={top1:.5f} time={step_time:.2f}s",
-               end="\n")
+        step_profiler = Profiler()
+        data_profiler = Profiler()
 
-            to_log = dict(
-                loss=results["loss"],
-                top1=results["top1"],
-                epoch=epoch + batch_num / total_batches,
-            )
-            logger(dict(train=to_log), step=step)
+        # for batch_num, batch in enumerate(tqdm.tqdm(train_ds)):
+        for batch_num in list(range(total_batches)):
+            with data_profiler:
+              batch = next(batch_iter)
+            with step_profiler:
+              results = train_step(batch)
+
+            _add_top1_bottom(results)
+
+            if batch_num % 1 == 0:
+              _print_results(results, "Train:")
+              print(f'data={data_profiler.mean_time()} step={step_profiler.mean_time()}')
+              to_log = _results_to_log(results)
+              to_log['epoch'] = epoch + batch_num / total_batches,
+              logger(dict(train=to_log), step=step)
 
             step += 1
 
@@ -342,12 +384,11 @@ def train(
         # take the mean over all the validation batches
         valid_results = tree.map_structure(
             lambda *xs: np.mean(xs), *valid_results)
-        print_results(valid_results, "Validation:")
+        _add_top1_bottom(valid_results)
+        _print_results(valid_results, "Validation:")
+
         # TODO: use validation loss to adjust learning rate
 
-        to_log = dict(
-            loss=valid_results["loss"],
-            top1=valid_results["top1"],
-            epoch=epoch + 1,
-        )
+        to_log = _results_to_log(valid_results)
+        to_log['epoch'] = epoch + 1,
         logger(dict(validation=to_log), step=step)
