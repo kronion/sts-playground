@@ -336,7 +336,7 @@ def train(
 
     # Save on memory by not compiling. This makes validation slower.
     # if compile:
-    compute_loss = tf.function(compute_loss)
+    #   compute_loss = tf.function(compute_loss)
 
     def train_step(batch) -> dict:
       with tf.GradientTape() as tape:
