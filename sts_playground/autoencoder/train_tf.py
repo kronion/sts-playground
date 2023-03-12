@@ -6,7 +6,7 @@ import wandb
 
 from sts_playground.autoencoder import tf_lib
 
-DATA = flags.DEFINE_string("data", "data/states.pkl", "path to data")
+DATA = flags.DEFINE_string("data", "data/state_action_triples_100k.pkl", "path to data")
 
 LR = flags.DEFINE_float("lr", 1e-4, "learning rate")
 BATCH_SIZE = flags.DEFINE_integer("batch_size", 1024, "batch size")
@@ -27,7 +27,7 @@ WANDB = ff.DEFINE_dict(
     'wandb',
     entity=ff.String('sts-ai'),
     project=ff.String('autoencoder'),
-    mode=ff.Enum('offline', ['online', 'offline', 'disabled']),
+    mode=ff.Enum('online', ['online', 'offline', 'disabled']),
     group=ff.String(getpass.getuser()),  # group by username
     name=ff.String(None),
     notes=ff.String(None),
