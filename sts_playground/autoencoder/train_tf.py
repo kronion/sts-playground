@@ -14,6 +14,7 @@ LOSS = flags.DEFINE_enum("loss", "ce", ["ce", "mse"], "type of loss")
 
 NUM_EPOCHS = flags.DEFINE_integer('num_epochs', 10, 'number of training epochs')
 COMPILE = flags.DEFINE_boolean('compile', True, 'Use tf.function.')
+DATA_LIMIT = flags.DEFINE_integer('data_limit', None, 'Limit dataset size to save memory.')
 
 NETWORK = ff.DEFINE_dict(
     'network',
@@ -40,7 +41,7 @@ def main(_):
             batch_size=BATCH_SIZE.value,
             loss=LOSS.value,
             network=NETWORK.value,
-            # dataset_size=total_size,
+            data_limit=DATA_LIMIT.value,
         ),
         **WANDB.value,
     )
@@ -54,6 +55,7 @@ def main(_):
         logger=wandb.log,
         loss_type=LOSS.value,
         compile=COMPILE.value,
+        data_limit=DATA_LIMIT.value,
     )
 
 if __name__ == "__main__":

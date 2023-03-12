@@ -29,7 +29,7 @@ def encode(space, x) -> tf.Tensor:
         return tf.one_hot(x, space.n)
 
     if isinstance(space, spaces.MultiBinary):
-        return tf.cast(x, tf.float32)
+        return 2 * tf.cast(x, tf.float32) - 1
 
     if isinstance(space, spaces.MultiDiscrete):
         num_components = space.nvec.shape[0]
@@ -245,11 +245,16 @@ def train(
     log_interval: int = 10,
     loss_type: str = 'ce',
     compile: bool = True,
+    data_limit: tp.Optional[int] = None,
 ):
     # download from https://drive.google.com/file/d/180068R95gdt-OAMm4-79bTlB2uq4P1UX/view?usp=share_link  # noqa: E501
     with open(data_path, "rb") as f:
         column_major = pickle.load(f)
     column_major = column_major['state_before']
+
+    if data_limit is not None:
+        column_major = tree.map_structure(
+           lambda xs: xs[:data_limit], column_major)
 
     column_major = tree.map_structure(fix_dtype, column_major)
     column_major = convert_lists(column_major)
@@ -329,8 +334,9 @@ def train(
 
         return loss, metrics
 
-    if compile:
-      compute_loss = tf.function(compute_loss)
+    # Save on memory by not compiling. This makes validation slower.
+    # if compile:
+    compute_loss = tf.function(compute_loss)
 
     def train_step(batch) -> dict:
       with tf.GradientTape() as tape:
@@ -366,8 +372,8 @@ def train(
 
             _add_top1_bottom(results)
 
-            if batch_num % 1 == 0:
-              _print_results(results, "Train:")
+            if batch_num % log_interval == 0:
+              _print_results(results, f"Train {batch_num}/{total_batches}:")
               print(f'data={data_profiler.mean_time():.3f} step={step_profiler.mean_time():.3f}')
               to_log = _results_to_log(results)
               to_log['epoch'] = epoch + batch_num / total_batches,
@@ -377,7 +383,7 @@ def train(
 
         print("Computing validation metrics.")
         valid_results = []
-        for batch in tqdm.tqdm(valid_ds):
+        for batch in valid_ds:
             _, results = compute_loss(batch)
             valid_results.append(results)
 
