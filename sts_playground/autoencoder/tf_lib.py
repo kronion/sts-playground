@@ -396,5 +396,5 @@ def train(
         # TODO: use validation loss to adjust learning rate
 
         to_log = _results_to_log(valid_results)
-        to_log['epoch'] = epoch + 1,
+        to_log['epoch'] = epoch + 1
         logger(dict(validation=to_log), step=step)
