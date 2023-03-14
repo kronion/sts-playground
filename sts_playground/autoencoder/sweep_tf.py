@@ -50,21 +50,6 @@ WANDB = ff.DEFINE_dict(
 )
 
 def train():
-    wandb.init()
-
-    tf_lib.train(
-        data_path=wandb.config.data,
-        batch_size=wandb.config.batch_size,
-        network_config=wandb.config.network,
-        learning_rate=wandb.config.lr,
-        num_epochs=wandb.config.epochs,
-        loss_type=wandb.config.loss,
-        compile=wandb.config.compile,
-        data_limit=wandb.config.data_limit,
-        logger=wandb.log,
-    )
-
-def main(_):
     wandb.init(
         config=dict(
             data=DATA.value,
@@ -82,6 +67,19 @@ def main(_):
         # TODO: make name and notes configurable
     )
 
+    tf_lib.train(
+        data_path=wandb.config.data,
+        batch_size=wandb.config.batch_size,
+        network_config=wandb.config.network,
+        learning_rate=wandb.config.lr,
+        num_epochs=wandb.config.epochs,
+        loss_type=wandb.config.loss,
+        compile=wandb.config.compile,
+        data_limit=wandb.config.data_limit,
+        logger=wandb.log,
+    )
+
+def main(_):
     sweep_id = wandb.sweep(sweep=sweep_configuration)
     wandb.agent(sweep_id, function=train, count=4)
 
