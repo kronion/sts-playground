@@ -293,8 +293,10 @@ def train(
     print("num components:", len(flat_spaces))
 
     # prepare data
-    train_ds = tf.data.Dataset.from_tensor_slices(train_set).prefetch(2)
-    valid_ds = tf.data.Dataset.from_tensor_slices(valid_set).prefetch(2)
+    with tf.device("cpu:0"):
+        train_ds = tf.data.Dataset.from_tensor_slices(train_set).prefetch(2)
+        valid_ds = tf.data.Dataset.from_tensor_slices(valid_set).prefetch(2)
+
     assert len(train_ds) == train_size
     del train_set, valid_set
     gc.collect()  # clean up old unnecessary data
