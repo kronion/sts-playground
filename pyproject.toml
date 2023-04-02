@@ -16,6 +16,7 @@ tensorflow = "^2.10.0"
 dm-sonnet = "^2.0.1"
 poethepoet = "^0.18.1"
 dm-tree = "^0.1.8"
+nvidia-cudnn-cu11 = "^8.8.1.3"
 
 [tool.poetry.dev-dependencies]
 
