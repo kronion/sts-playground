@@ -293,8 +293,10 @@ def train(
     print("num components:", len(flat_spaces))
 
     # prepare data
-    train_ds = tf.data.Dataset.from_tensor_slices(train_set).prefetch(2)
-    valid_ds = tf.data.Dataset.from_tensor_slices(valid_set).prefetch(2)
+    with tf.device("cpu:0"):
+        train_ds = tf.data.Dataset.from_tensor_slices(train_set)
+        valid_ds = tf.data.Dataset.from_tensor_slices(valid_set)
+
     assert len(train_ds) == train_size
     del train_set, valid_set
     gc.collect()  # clean up old unnecessary data
@@ -302,6 +304,9 @@ def train(
     # train_ds = train_ds.shuffle(train_size, reshuffle_each_iteration=True)
     train_ds = train_ds.batch(batch_size, drop_remainder=True)
     valid_ds = valid_ds.batch(batch_size, drop_remainder=True)
+
+    train_ds = train_ds.prefetch(2)
+    valid_ds = valid_ds.prefetch(2)
 
     auto_encoder = make_auto_encoder(input_size, **network_config)
     optimizer = snt.optimizers.Adam(learning_rate)
@@ -335,8 +340,8 @@ def train(
         return loss, metrics
 
     # Save on memory by not compiling. This makes validation slower.
-    # if compile:
-    #   compute_loss = tf.function(compute_loss)
+    if compile:
+      compute_loss = tf.function(compute_loss)
 
     def train_step(batch) -> dict:
       with tf.GradientTape() as tape:
@@ -399,6 +404,4 @@ def train(
 
         to_log = _results_to_log(valid_results)
         to_log['epoch'] = epoch + 1
-        to_log = dict(validation=to_log)
-        to_log['val_acc'] = valid_results['top1_mean']
-        logger(to_log, step=step)
+        logger(dict(validation=to_log), step=step)
