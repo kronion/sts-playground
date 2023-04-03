@@ -363,14 +363,12 @@ def train(
     for epoch in range(num_epochs):
         print(f"Epoch {epoch}")
         total_batches = len(train_ds)
-        total_batches = 1
         batch_iter = iter(train_ds)
 
         step_profiler = Profiler()
         data_profiler = Profiler()
 
-        # for batch_num, batch in enumerate(tqdm.tqdm(train_ds)):
-        for batch_num in list(range(total_batches)):
+        for batch_num, batch in enumerate(tqdm.tqdm(train_ds)):
             with data_profiler:
               batch = next(batch_iter)
             with step_profiler:
@@ -383,7 +381,7 @@ def train(
               print(f'data={data_profiler.mean_time():.3f} step={step_profiler.mean_time():.3f}')
               to_log = _results_to_log(results)
               to_log['epoch'] = epoch + batch_num / total_batches,
-              # logger(dict(train=to_log), step=step)
+              logger(dict(train=to_log), step=step)
 
             step += 1
 
@@ -392,7 +390,6 @@ def train(
         for batch in tqdm.tqdm(valid_ds):
             _, results = compute_loss(batch)
             valid_results.append(results)
-            break
 
         # take the mean over all the validation batches
         valid_results = tree.map_structure(
