@@ -401,4 +401,7 @@ def train(
 
         to_log = _results_to_log(valid_results)
         to_log['epoch'] = epoch + 1
-        logger(dict(validation=to_log), step=step)
+        to_log = dict(validation=to_log)
+        # Add this on its own to serve as a metric target for sweeping
+        to_log['val_acc'] = valid_results['top1_mean']
+        logger(to_log, step=step)
