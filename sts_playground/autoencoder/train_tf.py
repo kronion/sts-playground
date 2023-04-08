@@ -16,6 +16,8 @@ NUM_EPOCHS = flags.DEFINE_integer('num_epochs', 10, 'number of training epochs')
 COMPILE = flags.DEFINE_boolean('compile', True, 'Use tf.function.')
 DATA_LIMIT = flags.DEFINE_integer('data_limit', None, 'Limit dataset size to save memory.')
 
+DATASET_DEVICE = flags.DEFINE_string('dataset_device', 'cpu:0', 'Device to prepare dataset on. Set to CPU if GPU memory is low')
+
 NETWORK = ff.DEFINE_dict(
     'network',
     depth=ff.Integer(1, 'number of intermediate layers'),
@@ -56,6 +58,7 @@ def main(_):
         loss_type=LOSS.value,
         compile=COMPILE.value,
         data_limit=DATA_LIMIT.value,
+        dataset_device=DATASET_DEVICE.value,
     )
 
 if __name__ == "__main__":

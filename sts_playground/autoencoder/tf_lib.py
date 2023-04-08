@@ -273,6 +273,7 @@ def train(
     loss_type: str = 'ce',
     compile: bool = True,
     data_limit: tp.Optional[int] = None,
+    dataset_device: str = "cpu:0"
 ):
     # download from https://drive.google.com/file/d/180068R95gdt-OAMm4-79bTlB2uq4P1UX/view?usp=share_link  # noqa: E501
     with open(data_path, "rb") as f:
@@ -328,7 +329,7 @@ def train(
     print("num components:", len(flat_spaces))
 
     # prepare data
-    with tf.device("cpu:0"):
+    with tf.device(dataset_device):
         train_ds = tf.data.Dataset.from_tensor_slices(train_set)
         valid_ds = tf.data.Dataset.from_tensor_slices(valid_set)
 
