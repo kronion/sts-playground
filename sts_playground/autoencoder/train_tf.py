@@ -26,7 +26,7 @@ NETWORK = ff.DEFINE_dict(
 WANDB = ff.DEFINE_dict(
     'wandb',
     entity=ff.String('sts-ai'),
-    project=ff.String('autoencoder'),
+    project=ff.String('next-state-prediction'),
     mode=ff.Enum('online', ['online', 'offline', 'disabled']),
     group=ff.String(getpass.getuser()),  # group by username
     name=ff.String(None),

@@ -182,6 +182,33 @@ def make_auto_encoder(input_size: int, depth: int, width: int) -> snt.Module:
         activation=tf.nn.leaky_relu,
     )
 
+class NextStatePredictor(snt.Module):
+    """Predicts next state given previous state and action."""
+
+    def __init__(
+        self,
+        output_size: int,
+        depth: int,
+        width: int,
+        num_actions: int,
+        name: str = 'NextStatePredictor',
+    ):
+        super().__init__(name)
+
+        self._encoder = snt.nets.MLP(
+            output_sizes=[width] * depth,
+            activation=tf.nn.leaky_relu)
+        self._action_embed = snt.Embed(vocab_size=num_actions, embed_dim=width)
+        self._decoder = snt.nets.MLP(
+            output_sizes=[width] * (depth - 1) + [output_size],
+            activation=tf.nn.leaky_relu)
+
+    def __call__(self, prev_state: tf.Tensor, action: tf.Tensor) -> tf.Tensor:
+        state_embed = self._encoder(prev_state)
+        action_embed = self._action_embed(action)
+        hidden = state_embed + action_embed
+        return self._decoder(hidden)
+
 def fix_dtype(x: np.ndarray):
   """Fix types that tensorflow can't handle properly."""
   if x.dtype in (np.uint16,):
@@ -250,8 +277,10 @@ def train(
     # download from https://drive.google.com/file/d/180068R95gdt-OAMm4-79bTlB2uq4P1UX/view?usp=share_link  # noqa: E501
     with open(data_path, "rb") as f:
         column_major = pickle.load(f)
-    column_major = column_major['state_before']
 
+    obs_space = space_as_nest(base.OBSERVATION_SPACE)
+    # import ipdb; ipdb.set_trace()
+    column_major['action'] = np.array(column_major['action'], dtype=np.int32)
     if data_limit is not None:
         column_major = tree.map_structure(
            lambda xs: xs[:data_limit], column_major)
@@ -259,13 +288,19 @@ def train(
     column_major = tree.map_structure(fix_dtype, column_major)
     column_major = convert_lists(column_major)
 
-    obs_space = space_as_nest(base.OBSERVATION_SPACE)
-    for diff in utils.tree_diff(obs_space, column_major):
+    # Check that inputs have the shapes we're expecting.
+    expected_shape = {
+        'state_before': obs_space,
+        'state_after': obs_space,
+        'action': None,
+    }
+    for diff in utils.tree_diff(expected_shape, column_major):
         print(diff)
-        import ipdb; ipdb.set_trace()
-    tree.assert_same_structure(obs_space, column_major)
+        # import ipdb; ipdb.set_trace()
+    tree.assert_same_structure(expected_shape, column_major)
+    # tree.assert_same_structure(obs_space, column_major)
 
-    total_size = len(tree.flatten(column_major)[0])
+    total_size = len(column_major['action'])
     train_size = round(total_size * 0.8)
     print("total states:", total_size)
 
@@ -308,28 +343,35 @@ def train(
     train_ds = train_ds.prefetch(2)
     valid_ds = valid_ds.prefetch(2)
 
-    auto_encoder = make_auto_encoder(input_size, **network_config)
+    input_dim = space_size(base.OBSERVATION_SPACE)
+    #auto_encoder = make_auto_encoder(input_size, **network_config)
+    network = NextStatePredictor(
+        output_size=input_dim,
+        num_actions=base.ACTION_SPACE.n,
+        **network_config,
+    )
     optimizer = snt.optimizers.Adam(learning_rate)
 
     def compute_loss(batch) -> tp.Tuple[tf.Tensor, dict]:
         metrics = {}
 
-        flat_input = encode(base.OBSERVATION_SPACE, batch)
-        flat_output = auto_encoder(flat_input)
+        flat_input = encode(base.OBSERVATION_SPACE, batch['state_before'])
+        flat_output = network(flat_input, batch['action'])
+        targets = batch['state_after']
 
         if loss_type == "ce":
-            losses = struct_loss(base.OBSERVATION_SPACE, flat_output, batch)
+            losses = struct_loss(base.OBSERVATION_SPACE, flat_output, targets)
             metrics['ce'] = tree.map_structure(
                 lambda x: tf.reduce_mean(x, axis=0),
                 losses)
             loss = tf.add_n(tree.flatten(losses))  # [B]
         elif loss_type == "mse":
-            losses = tf.square(flat_input - flat_output)  # [B, D]
+            losses = tf.square(targets - flat_output)  # [B, D]
             loss = tf.reduce_sum(losses, axis=1)  # [B]
         loss = tf.reduce_mean(loss, axis=0)  # []
         metrics['loss'] = loss
 
-        top1 = accuracy(base.OBSERVATION_SPACE, flat_output, batch) #  {[B]}
+        top1 = accuracy(base.OBSERVATION_SPACE, flat_output, targets) #  {[B]}
         top1 = tree.map_structure(  # {[]}
             lambda x: tf.reduce_mean(x, axis=0), top1)
         top1_mean = tf.reduce_mean(tf.stack(tree.flatten(top1)))  # []
@@ -349,7 +391,7 @@ def train(
 
       params: list[tf.Variable] = tape.watched_variables()
       watched_names = [p.name for p in params]
-      trainable_names = [v.name for v in auto_encoder.trainable_variables]
+      trainable_names = [v.name for v in network.trainable_variables]
       assert set(watched_names) == set(trainable_names)
       grads = tape.gradient(loss, params)
       optimizer.apply(grads, params)
