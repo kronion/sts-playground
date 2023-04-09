@@ -302,7 +302,7 @@ def train(
     # tree.assert_same_structure(obs_space, column_major)
 
     total_size = len(column_major['action'])
-    train_size = round(total_size * 0.8)
+    train_size = round(total_size * 0.9)
     print("total states:", total_size)
 
     # import tensorflow.python.data.util as util
