@@ -7,6 +7,7 @@ import wandb
 from sts_playground.autoencoder import tf_lib
 
 DATA = flags.DEFINE_string("data", "data/states.pkl", "path to data")
+DATA_LIMIT = flags.DEFINE_integer('data_limit', None, 'Limit dataset size to save memory.')
 
 LR = flags.DEFINE_float("lr", 1e-4, "learning rate")
 BATCH_SIZE = flags.DEFINE_integer("batch_size", 1024, "batch size")
@@ -14,7 +15,6 @@ LOSS = flags.DEFINE_enum("loss", "ce", ["ce", "mse"], "type of loss")
 
 NUM_EPOCHS = flags.DEFINE_integer('num_epochs', 10, 'number of training epochs')
 COMPILE = flags.DEFINE_boolean('compile', True, 'Use tf.function.')
-DATA_LIMIT = flags.DEFINE_integer('data_limit', None, 'Limit dataset size to save memory.')
 
 NETWORK = ff.DEFINE_dict(
     'network',
@@ -32,6 +32,9 @@ WANDB = ff.DEFINE_dict(
     name=ff.String(None),
     notes=ff.String(None),
 )
+
+CHECKPOINTS_ENABLED = flags.DEFINE_boolean("checkpoints_enabled", False, "Whether to restore/save checkpoints")
+CHECKPOINT_DIR = flags.DEFINE_string("checkpoint_dir", "./checkpoints", "Location on disk to store checkpoints")
 
 
 def main(_):
@@ -56,6 +59,8 @@ def main(_):
         loss_type=LOSS.value,
         compile=COMPILE.value,
         data_limit=DATA_LIMIT.value,
+        checkpoints_enabled=CHECKPOINTS_ENABLED.value,
+        checkpoint_dir=CHECKPOINT_DIR.value,
     )
 
 if __name__ == "__main__":

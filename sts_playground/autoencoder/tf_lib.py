@@ -246,6 +246,8 @@ def train(
     loss_type: str = 'ce',
     compile: bool = True,
     data_limit: tp.Optional[int] = None,
+    checkpoints_enabled: bool = False,
+    checkpoint_dir: str = "./checkpoints",
 ):
     # download from https://drive.google.com/file/d/180068R95gdt-OAMm4-79bTlB2uq4P1UX/view?usp=share_link  # noqa: E501
     with open(data_path, "rb") as f:
@@ -305,9 +307,11 @@ def train(
 
     auto_encoder = make_auto_encoder(input_size, **network_config)
     optimizer = snt.optimizers.Adam(learning_rate)
-    checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=auto_encoder)
-    manager = tf.train.CheckpointManager(checkpoint, directory="./model", max_to_keep=5)
-    status = checkpoint.restore(manager.latest_checkpoint)
+
+    if checkpoints_enabled:
+        checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=auto_encoder)
+        manager = tf.train.CheckpointManager(checkpoint, directory=checkpoint_dir, max_to_keep=5)
+        checkpoint.restore(manager.latest_checkpoint)
 
     def compute_loss(batch) -> tp.Tuple[tf.Tensor, dict]:
         metrics = {}
