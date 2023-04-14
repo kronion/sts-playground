@@ -302,7 +302,7 @@ def train(
     gc.collect()  # clean up old unnecessary data
 
     # train_ds = train_ds.shuffle(train_size, reshuffle_each_iteration=True)
-    train_ds = train_ds.batch(batch_size, drop_remainder=False)
+    train_ds = train_ds.batch(batch_size, drop_remainder=True)
     valid_ds = valid_ds.batch(batch_size, drop_remainder=False)
 
     auto_encoder = make_auto_encoder(input_size, **network_config)
