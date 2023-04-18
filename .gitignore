@@ -18,3 +18,6 @@ wandb
 
 # training data
 data
+
+# ray checkpoints
+checkpoints
