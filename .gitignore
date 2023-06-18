@@ -19,3 +19,6 @@ wandb
 # training data
 data/*
 !data/*.py
+
+# ray checkpoints
+checkpoints
