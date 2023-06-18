@@ -313,6 +313,7 @@ def train(
     auto_encoder = make_auto_encoder(input_size, **network_config)
     optimizer = snt.optimizers.Adam(learning_rate)
 
+    manager = None
     if checkpoints_enabled:
         checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=auto_encoder)
         manager = tf.train.CheckpointManager(checkpoint, directory=checkpoint_dir, max_to_keep=5)
@@ -411,4 +412,5 @@ def train(
         to_log['epoch'] = epoch + 1
         logger(dict(validation=to_log), step=step)
 
-        manager.save()
+        if checkpoints_enabled and manager is not None:
+            manager.save()
