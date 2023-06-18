@@ -24,6 +24,7 @@ ipython = "^8.5.0"
 mypy = "^0.982"
 jupyterlab = "^3.5.2"
 tqdm = "^4.64.1"
+black = "^23.3.0"
 
 [tool.poe.tasks]
 rl_train = "python -m sts_playground.autoencoder.train"
