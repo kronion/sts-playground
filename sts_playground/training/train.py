@@ -7,7 +7,7 @@ from absl import app, logging
 from gym import spaces
 from ray import tune
 from ray.air import config
-from ray.air.callbacks.wandb import WandbLoggerCallback
+from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.rllib.algorithms import ppo
 from ray.rllib.models import preprocessors
 from ray.train.rl import RLTrainer
@@ -141,6 +141,7 @@ def main(_):
         callbacks=callbacks,
         checkpoint_config=checkpoint_config,
         sync_config=sync_config,
+        stop={"training_iteration": 1},
         verbose=tune_config["verbose"],
     )
 

@@ -2,7 +2,7 @@ from typing import Dict
 
 from gym_sts.spaces import actions
 from gym_sts.spaces.observations import Observation
-from gym_sts.spaces.observations.constants import ScreenType
+from gym_sts.spaces.constants.base import ScreenType
 from ray.rllib.env import BaseEnv
 from ray.rllib.evaluation import Episode, RolloutWorker
 from ray.rllib.policy import Policy
