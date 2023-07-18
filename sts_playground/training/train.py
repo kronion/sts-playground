@@ -15,7 +15,7 @@ from ray.train.rl import RLTrainer
 from gym_sts.envs import base
 from gym_sts.rl import action_masking
 
-from .callbacks import CustomMetricCallbacks
+# from .callbacks import CustomMetricCallbacks
 
 
 def check_rllib_bug(space: spaces.Space):
@@ -39,6 +39,7 @@ ENV = ff.DEFINE_dict(
     headless=ff.Boolean(True),
     animate=ff.Boolean(False),
     build_image=ff.Boolean(False),
+    log_states=ff.Boolean(False),
 )
 
 TUNE = ff.DEFINE_dict(
@@ -97,6 +98,7 @@ def main(_):
         "output_dir": output_dir,
         "headless": ENV.value["headless"],
         "animate": ENV.value["animate"],
+        "log_states": ENV.value["log_states"],
     }
 
     if ENV.value["build_image"]:
@@ -109,7 +111,7 @@ def main(_):
     ppo_config = {
         "env": Env,
         "env_config": env_config,
-        "framework": "torch",
+        "framework": "tf2",
         "eager_tracing": True,
         # "horizon": 64,  # just for reporting some rewards
         # "soft_horizon": True,
@@ -117,7 +119,9 @@ def main(_):
         "model": {
             "custom_model": "masked",
         },
-        "callbacks": CustomMetricCallbacks,
+        # Commented out because rllib's EpisodeV2 breaks the
+        # old Episode API our callback depends on
+        # "callbacks": CustomMetricCallbacks,
     }
     ppo_config.update(rl_config)
 
@@ -136,12 +140,14 @@ def main(_):
     tune_config = TUNE.value
     sync_config = tune.SyncConfig(**tune_config["sync_config"])
     checkpoint_config = config.CheckpointConfig(**tune_config["checkpoint_config"])
+    failure_config = config.FailureConfig(max_failures=-1)  # Retry infinite times
     run_config = config.RunConfig(
         name=tune_config["name"],
         callbacks=callbacks,
         checkpoint_config=checkpoint_config,
         sync_config=sync_config,
-        stop={"training_iteration": 1},
+        failure_config=failure_config,
+        stop={"training_iteration": 100},
         verbose=tune_config["verbose"],
     )
 
