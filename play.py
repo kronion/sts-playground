@@ -9,13 +9,13 @@ agent = RandomAgent(env)
 SEED = 17
 agent.seed(SEED)
 
-_, info = env.reset(options={"sts_seed": "SLAY"}, return_info=True)
+_, info = env.reset(options={"sts_seed": "SLAY"})
 print(SEED, info["sts_seed"], info["seed"])
 
 while True:
     action = agent.predict()[0]
     try:
-        obs, _, done, _ = env.step(action)
+        obs, _, done, _, _ = env.step(action)
     except ObservationError as e:
         breakpoint()
         pass
@@ -23,5 +23,5 @@ while True:
     if done:
         SEED += 1
         agent.seed(SEED)
-        _, info = env.reset(return_info=True)
+        _, info = env.reset()
         print(SEED, info["sts_seed"], info["seed"])

@@ -7,7 +7,7 @@ from absl import app, logging
 from gym import spaces
 from ray import tune
 from ray.air import config
-from ray.air.callbacks.wandb import WandbLoggerCallback
+from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.rllib.algorithms import ppo
 from ray.rllib.models import preprocessors
 from ray.train.rl import RLTrainer
@@ -15,7 +15,7 @@ from ray.train.rl import RLTrainer
 from gym_sts.envs import base
 from gym_sts.rl import action_masking
 
-from .callbacks import CustomMetricCallbacks
+# from .callbacks import CustomMetricCallbacks
 
 
 def check_rllib_bug(space: spaces.Space):
@@ -38,6 +38,8 @@ ENV = ff.DEFINE_dict(
     out=ff.String(None),
     headless=ff.Boolean(True),
     animate=ff.Boolean(False),
+    reboot_frequency=ff.Integer(128),
+    log_states=ff.Boolean(False),
     build_image=ff.Boolean(False),
 )
 
@@ -73,9 +75,16 @@ WANDB = ff.DEFINE_dict(
 
 RL = ff.DEFINE_dict(
     "rl",
-    num_workers=ff.Integer(0),
-    rollout_fragment_length=ff.Integer(32),
+    rollout_fragment_length=ff.Integer(128),
     train_batch_size=ff.Integer(1024),
+)
+
+SCALING = ff.DEFINE_dict(
+    "scaling",
+    num_workers=ff.Integer(0),
+    use_gpu=ff.Boolean(False),
+    trainer_resources=dict(CPU=ff.Integer(1), GPU=ff.Integer(0)),
+    resources_per_worker=dict(CPU=ff.Integer(1), GPU=ff.Integer(0)),
 )
 
 
@@ -97,6 +106,8 @@ def main(_):
         "output_dir": output_dir,
         "headless": ENV.value["headless"],
         "animate": ENV.value["animate"],
+        "reboot_frequency": ENV.value["reboot_frequency"],
+        "log_states": ENV.value["log_states"],
     }
 
     if ENV.value["build_image"]:
@@ -104,12 +115,11 @@ def main(_):
         base.SlayTheSpireGymEnv.build_image()
 
     rl_config = RL.value.copy()
-    num_workers = rl_config.pop("num_workers")
 
     ppo_config = {
         "env": Env,
         "env_config": env_config,
-        "framework": "torch",
+        "framework": "tf2",
         "eager_tracing": True,
         # "horizon": 64,  # just for reporting some rewards
         # "soft_horizon": True,
@@ -117,12 +127,15 @@ def main(_):
         "model": {
             "custom_model": "masked",
         },
-        "callbacks": CustomMetricCallbacks,
+        # Commented out because rllib's EpisodeV2 breaks the
+        # old Episode API our callback depends on
+        # "callbacks": CustomMetricCallbacks,
     }
     ppo_config.update(rl_config)
 
+    scaling_config = SCALING.value.copy()
     trainer = RLTrainer(
-        scaling_config=config.ScalingConfig(num_workers=num_workers, use_gpu=True),
+        scaling_config=config.ScalingConfig(**scaling_config),
         algorithm=ppo.PPO,
         config=ppo_config,
     )
@@ -136,11 +149,14 @@ def main(_):
     tune_config = TUNE.value
     sync_config = tune.SyncConfig(**tune_config["sync_config"])
     checkpoint_config = config.CheckpointConfig(**tune_config["checkpoint_config"])
+    # failure_config = config.FailureConfig(max_failures=-1)  # Retry infinite times
     run_config = config.RunConfig(
         name=tune_config["name"],
         callbacks=callbacks,
         checkpoint_config=checkpoint_config,
         sync_config=sync_config,
+        # failure_config=failure_config,
+        stop={"training_iteration": 100},
         verbose=tune_config["verbose"],
     )
 
