@@ -7,15 +7,17 @@ authors = ["Zeus Kronion <kronion@users.noreply.github.com>"]
 [tool.poetry.dependencies]
 python = "^3.9, <3.11"
 gym-sts = {path = "../gym-sts", develop = true}
-ray = {extras = ["rllib"], version = "^2.5.0"}
+ray = {extras = ["rllib"], version = "~2.5.0"}
 gym = "^0.23.1"
 absl-py = "^1.3.0"
 fancyflags = "^1.1"
 wandb = "^0.13.5"
-tensorflow = "^2.10.0"
+tensorflow = "~2.12.0"
 dm-sonnet = "^2.0.1"
 poethepoet = "^0.18.1"
 dm-tree = "^0.1.8"
+tensorflow-probability = "^0.20.0"
+nvidia-cudnn-cu11 = "8.6.0.163"
 
 [tool.poetry.dev-dependencies]
 

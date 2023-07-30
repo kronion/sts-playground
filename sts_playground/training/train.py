@@ -38,8 +38,9 @@ ENV = ff.DEFINE_dict(
     out=ff.String(None),
     headless=ff.Boolean(True),
     animate=ff.Boolean(False),
-    build_image=ff.Boolean(False),
+    reboot_frequency=ff.Integer(128),
     log_states=ff.Boolean(False),
+    build_image=ff.Boolean(False),
 )
 
 TUNE = ff.DEFINE_dict(
@@ -75,7 +76,7 @@ WANDB = ff.DEFINE_dict(
 RL = ff.DEFINE_dict(
     "rl",
     num_workers=ff.Integer(0),
-    rollout_fragment_length=ff.Integer(32),
+    rollout_fragment_length=ff.Integer(128),
     train_batch_size=ff.Integer(1024),
 )
 
@@ -98,6 +99,7 @@ def main(_):
         "output_dir": output_dir,
         "headless": ENV.value["headless"],
         "animate": ENV.value["animate"],
+        "reboot_frequency": ENV.value["reboot_frequency"],
         "log_states": ENV.value["log_states"],
     }
 
@@ -140,13 +142,13 @@ def main(_):
     tune_config = TUNE.value
     sync_config = tune.SyncConfig(**tune_config["sync_config"])
     checkpoint_config = config.CheckpointConfig(**tune_config["checkpoint_config"])
-    failure_config = config.FailureConfig(max_failures=-1)  # Retry infinite times
+    # failure_config = config.FailureConfig(max_failures=-1)  # Retry infinite times
     run_config = config.RunConfig(
         name=tune_config["name"],
         callbacks=callbacks,
         checkpoint_config=checkpoint_config,
         sync_config=sync_config,
-        failure_config=failure_config,
+        # failure_config=failure_config,
         stop={"training_iteration": 100},
         verbose=tune_config["verbose"],
     )
