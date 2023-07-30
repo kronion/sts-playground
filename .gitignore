@@ -17,7 +17,8 @@ desktop-1.0.jar
 wandb
 
 # training data
-data
+data/*
+!data/*.py
 
 # ray checkpoints
 checkpoints
